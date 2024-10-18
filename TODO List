@@ -1,0 +1,9 @@
+Wrote Launch file (ros_node_manager) to execute multiple .py files -Complete-
+Implement Obstacle Avoidance Node -In Progress- -Bona-
+(Lab 3, Demonstration) Integrate Math Functions to Move the Robot to Correct Locations -Pending-
+Write Multiplexer Node to Gather All Velocity COmmands from ALl the Nodes and Pubish Highest Priority Topic -Pending-
+Write a launch file (obstacle_avoidance.launch) to run all required nodes to control the robot using keyboard while avoiding obstacles -Pending-
+Lab 4, Post Questions -Pending-
+Lab 4, Stuff not including Post Questions -Pending- 
+
+Website link: http://vigir.ee.missouri.edu/~gdesouza/ece4340/index.htm 
