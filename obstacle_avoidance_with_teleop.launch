@@ -1,0 +1,5 @@
+<launch>
+    <node pkg="your_package" type="obstacle_avoidance.py" name="obstacle_avoidance" output="screen"/>
+    <node pkg="your_package" type="velocity_multiplexer.py" name="velocity_multiplexer" output="screen"/>
+    <node pkg="your_package" type="teleop_square.py" name="teleop_square" output="screen"/>
+</launch>
