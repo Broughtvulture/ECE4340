@@ -70,10 +70,6 @@ def calc_v_w(Kp, Ka, Kb, dx, dy, theta):
     v, w = np.dot(A, B)
     # returns linear & angular velocity
     return v, w
-
-# Grab X Y Theta from Transformation
-#	def grab_param(Hmat):
-#		# Get Odometry Readings
 		
 def odom_callback(msg):
     # Get x and y positions from the odometry message
@@ -119,6 +115,7 @@ def odom_callback(msg):
 	# Sleep
 	rospy.sleep(1)
 	# Read Odometry
+	
 	# Build source HMat from current
 	source_Hmat = gen_Hmat(0, 0, 0, 0)
 	# Compute current HMat from destination
