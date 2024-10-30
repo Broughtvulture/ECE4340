@@ -1,4 +1,5 @@
 #!/usr/bin/env python
+
 import rospy
 from ca_msgs.msg import Bumper
 from geometry_msgs.msg import Twist
@@ -18,19 +19,23 @@ def obstacle_avoidance():
     # Subscribe to the bumper topic
     sub = rospy.Subscriber('/bumper', Bumper, bumper_callback)
     # Publisher for velocity commands
-    pub = rospy.Publisher('/obstacle_avoidance/cmd_vel', Twist, queue_size=1)
+    pub = rospy.Publisher('/cmd_vel', Twist, queue_size=1)
     rate = rospy.Rate(10)
     move_cmd = Twist()
+
     while not rospy.is_shutdown():
         if left_contact:
             move_cmd.angular.z = -1  # Turn right if left bumper is pressed
+            move_cmd.linear.x = 0.0
             rospy.loginfo("Turning right")
         elif right_contact:
             move_cmd.angular.z = 1  # Turn left if right bumper is pressed
+            move_cmd.linear.x = 0.0
             rospy.loginfo("Turning left")
         else:
-            move_cmd.angular.z = 0  # Stop turning when no bumper is pressed
-            rospy.loginfo("No bumper pressed")
+            move_cmd.angular.z = 0  # Go straight when no bumper is pressed
+            move_cmd.linear.x = 0.5
+
         # Publish the velocity command
         pub.publish(move_cmd)
         rate.sleep()
