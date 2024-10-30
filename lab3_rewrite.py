@@ -23,6 +23,22 @@ def make_Hmat(rot, trans):
     # Return homogenious matrix
     return homo
 
+# Extract x, y, theta from homogeneous matrix
+def extract_Mat(Hmat):
+    x = Hmat[0, 3]
+    y = Hmat[1, 3]
+    # Check for gimbal lock
+    sy = np.sqrt(Hmat[0, 0]**2 + Hmat[1, 0]**2)
+    singular = sy < 1e-6
+    if not singular:
+        # Rotation around z-axis (Yaw)
+        theta = np.degrees(np.arctan2(Hmat[1, 0], Hmat[0, 0]))  
+    else:
+        # Arbitrary value
+        theta = 0
+    # Return x, y, theta(degrees)
+    return x, y, theta
+    
 # Generate a Homogenious Matrix using x, y, z, theta(degrees)
 def gen_Hmat(x, y, z, theta_d):
 	# Define rotation for 90 degrees about the z-axis
@@ -57,7 +73,7 @@ def find_beta(theta, alpha):
 def calc_v_w(Kp, Ka, Kb, dx, dy, theta):
     # Calculate the Error parameters
     p = find_p(dx, dy)
-    alpha = find alpha(theta, dx, dy)
+    alpha = find_alpha(theta, dx, dy)
     beta = find_beta(theta, alpha)
     # K constraints will different between Gazebo & Roomba
     # Gazebo- Kp= Ka= Kb=
@@ -73,8 +89,9 @@ def calc_v_w(Kp, Ka, Kb, dx, dy, theta):
 		
 def odom_callback(msg):
     # Get x and y positions from the odometry message
-    global x = msg.pose.pose.position.x
-    global y = msg.pose.pose.position.y
+    global x, y, theta
+    x = msg.pose.pose.position.x
+    y = msg.pose.pose.position.y
 
     # Get orientation in quaternion form
     orientation_q = msg.pose.pose.orientation
@@ -86,22 +103,25 @@ def odom_callback(msg):
     # Convert quaternion to euler angles (yaw represents theta)
     siny_cosp = 2 * (qw * qz + qx * qy)
     cosy_cosp = 1 - 2 * (qy * qy + qz * qz)
-    global theta = math.atan2(siny_cosp, cosy_cosp)
+    theta = math.atan2(siny_cosp, cosy_cosp)
 
     # Print or log x, y, and theta
     # rospy.loginfo("Position -> x: %.2f, y: %.2f, theta: %.2f radians" % (x, y, theta))
 
-	# Hard Code x, y, theta
-	destination_Hmat = gen_Hmat(2, 1, 0, 90)
+	# 1) Hard Code x, y, theta
+    destination_Hmat = gen_Hmat(2, 1, 0, 90)
 	
 	# -Loop Start
 	# Compute x, y, theta, 1, 2, 90 deg
 	
-	# Find p, alpha, beta
-	Kp = 1
-	Ka = 1
-	Kb = 1
-	v, w = calc_v_w(Kp, Ka, Kb, dx, dy, theta)
+	# 2) Find p, alpha, beta
+    dx = x - extract_Mat(destination_Hmat)[0]
+    dy = y - extract_Mat(destination_Hmat)[1]
+    dtheta = theta - extract_Mat(destination_Hmat)[2]
+    Kp = 1
+    Ka = 1
+    Kb = 1
+    v, w = calc_v_w(Kp, Ka, Kb, dx, dy, dtheta)
 	
     # Create a Twist message for linear and angular velocity
     velocity_cmd = Twist()
@@ -109,23 +129,20 @@ def odom_callback(msg):
     velocity_cmd.linear.x = v  
     # Angular velocity (e.g., 0.2 rad/s)
     velocity_cmd.angular.z = w  
-	# Move robot
-	cmd_vel_pub.publish(velocity_cmd)
+	# 3) Move robot
+    cmd_vel_pub.publish(velocity_cmd)
 	
-	# Sleep
-	rospy.sleep(1)
-	# Read Odometry
+	# 4) Sleep
+    rospy.sleep(1)
+	# 5) Read Odometry: Only needed to compute dx, dy, theta changes [Done at (2)]
 	
-	# Build source HMat from current
-	source_Hmat = gen_Hmat(0, 0, 0, 0)
-	# Compute current HMat from destination
-	current_Hmat = np.linalg.inv(source_Hmat) * destination_Hmat
-	# Loop till destination met
-	
+    # Build source HMat from current
+    source_Hmat = gen_Hmat(0, 0, 0, 0)
+    # Compute current HMat from destination
+    current_Hmat = np.linalg.inv(source_Hmat) * destination_Hmat
+    # Loop till destination met
 	# -Loop End
 		
-   
-
 def odom_listener():
     rospy.init_node('odom_listener', anonymous=True)
     rospy.Subscriber("/odom", Odometry, odom_callback)
