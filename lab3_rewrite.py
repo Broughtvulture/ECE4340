@@ -73,8 +73,8 @@ def calc_v_w(Kp, Ka, Kb, dx, dy, theta):
 		
 def odom_callback(msg):
     # Get x and y positions from the odometry message
-    x = msg.pose.pose.position.x
-    y = msg.pose.pose.position.y
+    global x = msg.pose.pose.position.x
+    global y = msg.pose.pose.position.y
 
     # Get orientation in quaternion form
     orientation_q = msg.pose.pose.orientation
@@ -86,7 +86,7 @@ def odom_callback(msg):
     # Convert quaternion to euler angles (yaw represents theta)
     siny_cosp = 2 * (qw * qz + qx * qy)
     cosy_cosp = 1 - 2 * (qy * qy + qz * qz)
-    theta = math.atan2(siny_cosp, cosy_cosp)
+    global theta = math.atan2(siny_cosp, cosy_cosp)
 
     # Print or log x, y, and theta
     # rospy.loginfo("Position -> x: %.2f, y: %.2f, theta: %.2f radians" % (x, y, theta))
@@ -119,8 +119,9 @@ def odom_callback(msg):
 	# Build source HMat from current
 	source_Hmat = gen_Hmat(0, 0, 0, 0)
 	# Compute current HMat from destination
-	current_Hmat = np.linalg.inv()
+	current_Hmat = np.linalg.inv(source_Hmat) * destination_Hmat
 	# Loop till destination met
+	
 	# -Loop End
 		
    
