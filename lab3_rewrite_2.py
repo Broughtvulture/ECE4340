@@ -3,6 +3,7 @@ import rospy
 import numpy as np
 from nav_msgs.msg import Odometry
 from geometry_msgs.msg import Point, Twist
+from tf.transformations import euler_from_quaternion
 import math
 import time
 
@@ -111,9 +112,10 @@ def check_odom(msg):
     qw = orientation_q.w
 
     # Convert quaternion to euler angles (yaw represents theta) change to use tf
-    siny_cosp = 2 * (qw * qz + qx * qy)
-    cosy_cosp = 1 - 2 * (qy * qy + qz * qz)
-    theta = np.arctan2(siny_cosp, cosy_cosp)
+    (roll, pitch, theta) = euler_from_quaternion([orientation_q.x, orientation_q.y, orientation_q.z, orientation_q.w])
+    # siny_cosp = 2 * (qw * qz + qx * qy)
+    # cosy_cosp = 1 - 2 * (qy * qy + qz * qz)
+    # theta = np.arctan2(siny_cosp, cosy_cosp)
 
     # Print or log x, y, and theta
     # rospy.loginfo("Position -> x: %.2f, y: %.2f, theta: %.2f radians" % (x, y, theta))
