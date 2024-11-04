@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 import rospy
 import numpy as np
-
 from nav_msgs.msg import Odometry
-from geometry_msgs.msg import Twist
+from geometry_msgs.msg import Point, Twist
 import math
+import time
 
 # Create a Length by Width Matrix
 def make_Mat(x, y, value=None):
@@ -59,11 +59,19 @@ def gen_Hmat(x, y, z, theta_d):
 
 # calculate the p using the change in delta x, delta y
 def find_p(dx, dy):
-    return ((dx**2, dy**2)**0.5)
+    return ((dx**2 + dy**2)**0.5)
 
 # calculate the p using the change in delta x, delta y, theta
 def find_alpha(theta, dx, dy):
-    return (-theta + np.degrees(np.arctan(dy/dx)))
+    if dx == 0:
+        if dy > 0:
+            return 90  # 90 degrees if dy is positive
+        elif dy < 0:
+            return 270  # 270 degrees if dy is negative
+        else:
+            return np.nan  # Undefined angle if both are zero
+    else:
+        return -theta + np.degrees(np.arctan(dy / dx))
     
 # calculate the p using the change in delta x, delta y, theta   
 def find_beta(theta, alpha):
@@ -83,15 +91,15 @@ def calc_v_w(Kp, Ka, Kb, dx, dy, theta):
     # stores error calculations
     error_E = np.array([[p],[alpha],[beta]])
     # Perform the multiplication
-    v, w = np.dot(A, B)
+    v, w = np.dot(constraint_K, error_E)
     # returns linear & angular velocity
     return v, w
 		
-def odom_callback(msg):
+def check_odom(msg):
     # Get x and y positions from the odometry message
-    global x, y, theta
     x = msg.pose.pose.position.x
     y = msg.pose.pose.position.y
+    z = msg.pose.pose.position.z
 
     # Get orientation in quaternion form
     orientation_q = msg.pose.pose.orientation
@@ -107,53 +115,75 @@ def odom_callback(msg):
 
     # Print or log x, y, and theta
     # rospy.loginfo("Position -> x: %.2f, y: %.2f, theta: %.2f radians" % (x, y, theta))
+    print(f"Subscriber Info :{msg.pose.pose}")
 
-	# 1) Hard Code x, y, theta
-    destination_Hmat = gen_Hmat(2, 1, 0, 90)
+	# # 1) Hard Coded - x, y, theta : (Destination Matrix) in reference to Source Matrix
+    s_Hmat_d = gen_Hmat(2, 1, 0, 90)
 	
-	# -Loop Start
-	# Compute x, y, theta, 1, 2, 90 deg
-	
-	# 2) Find p, alpha, beta
-    dx = x - extract_Mat(destination_Hmat)[0]
-    dy = y - extract_Mat(destination_Hmat)[1]
-    dtheta = theta - extract_Mat(destination_Hmat)[2]
-    Kp = 1
-    Ka = 1
-    Kb = 1
+    # -Loop Start
+    # 2) Read Odometry - (Current Matrix) in reference to Source
+    s_Hmat_c = gen_Hmat(x, y, z, theta)
+    
+    # 3) Compute x, y, theta
+    # Inverse (Current Matrix) in refernece to Source
+    c_Hmat_s = np.linalg.inv(s_Hmat_c)
+    # (Current Matrix  multiplied by Destination Matrix) in reference to Source
+    # (Destination Matrix) in Reference to Current
+    c_Hmat_d = np.dot(c_Hmat_s, s_Hmat_d)
+    # Extract x, y, theta from Matrix
+    dx = extract_Mat(c_Hmat_d)[0]
+    dy = extract_Mat(c_Hmat_d)[1]
+    dtheta = extract_Mat(c_Hmat_d)[2]
+
+    # 4) Convert to p & b, Compute control
+    # Find p
+    p = find_p(dx, dy)
+    # Find alpha
+    alpha = find_alpha(dtheta, dx, dy)
+    # Find beta
+    beta = find_beta(dtheta, alpha)
+    # Input K Constraints
+    Kp = 0.2
+    Ka = 0.21
+    Kb = -0.1
+    # Compute Linear & Angular Velocities
     v, w = calc_v_w(Kp, Ka, Kb, dx, dy, dtheta)
-	
-    # Create a Twist message for linear and angular velocity
-    velocity_cmd = Twist()
-    # Forward linear velocity (e.g., 0.5 m/s)
-    velocity_cmd.linear.x = v  
-    # Angular velocity (e.g., 0.2 rad/s)
-    velocity_cmd.angular.z = w  
-	# 3) Move robot
-    cmd_vel_pub.publish(velocity_cmd)
-	
-	# 4) Sleep
-    rospy.sleep(1)
-	# 5) Read Odometry: Only needed to compute dx, dy, theta changes [Done at (2)]
-	
-    # Build source HMat from current
-    source_Hmat = gen_Hmat(0, 0, 0, 0)
-    # Compute current HMat from destination
-    current_Hmat = np.linalg.inv(source_Hmat) * destination_Hmat
+    # Debug Values : The positions arent accurate to odometry
+    print(f"CURRENT MATRIX COORD - x:{x} y:{y} theta:{theta}")
+    print(f"DISTANCE MATRIX COORD - dx:{dx} dy:{dy} dtheta:{dtheta}")
+    # # print(f"DISTANCE MATRIX COORD - dx:{dx} dy:{dy} Mat:{extract_Mat(c_Hmat_d)}\n")
+    print(f"v:{v} w:{w}")
+    print(f"p:{p} beta:{beta} alpha:{alpha}\n")
+    
     # Loop till destination met
+    if p > 0.1:
+        # Create a Twist message for linear and angular velocity
+        velocity_cmd = Twist()
+        # Move robot
+        # Forward linear velocity (e.g., 0.5 m/s)
+        velocity_cmd.linear.x = v
+        velocity_cmd.angular.z = 0
+        motor_pub.publish(velocity_cmd)
+        rospy.sleep(1)
+        # Turn robot
+        # Angular velocity (e.g., 0.2 rad/s)
+        velocity_cmd.angular.z = w
+        velocity_cmd.linear.x = 0
+        rospy.sleep(1)
 	# -Loop End
-		
-def odom_listener():
-    rospy.init_node('odom_listener', anonymous=True)
-    rospy.Subscriber("/odom", Odometry, odom_callback)
+    
+def motor_controller():
+    rospy.init_node('motor_controller', anonymous=True)
+    # Get Current Matrix from Odometry
+    rospy.Subscriber("/odom", Odometry, check_odom)
     rospy.spin()
 
 # Initialize publisher for velocity commands
-cmd_vel_pub = rospy.Publisher('/cmd_vel', Twist, queue_size=10)
-
+global motor_pub
+motor_pub = rospy.Publisher('/cmd_vel', Twist, queue_size=1)
 
 if __name__ == '__main__':
     try:
-        odom_listener()
+        motor_controller()
     except rospy.ROSInterruptException:
         pass
