@@ -108,7 +108,7 @@ def check_odom(msg):
     (roll, pitch, otheta) = euler_from_quaternion([orientation_q.x, orientation_q.y, orientation_q.z, orientation_q.w])
     
 	# 1) Hard Coded - x, y, theta : (Destination Matrix) in reference to Source Matrix
-    s_Hmat_d = gen_Hmat(2, 1, 0, np.radians(90))
+    s_Hmat_d = gen_Hmat(0, 1, 0, np.radians(90))
     # Extract x, y, theta from Destination
     ddx, ddy, ddtheta = extract_Mat(s_Hmat_d)
 	
