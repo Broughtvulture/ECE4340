@@ -8,6 +8,8 @@ from std_msgs.msg import String
 import math
 import time
 
+# http://vigir.ee.missouri.edu/~gdesouza/ece4340/index.htm
+
 # Initialize publisher for velocity commands, P tracker
 global motor_pub
 # Store Odometry Iterations
