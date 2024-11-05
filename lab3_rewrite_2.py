@@ -10,15 +10,12 @@ import time
 
 # Initialize publisher for velocity commands, P tracker
 global motor_pub
-# Store Calculation P Value
-p = 10
 # Store Odometry Iterations
 odom_counter = 0
 # Store Previous Odometry Calculations
 px, py, ptheta = 0, 0, 0
 
 motor_pub = rospy.Publisher('/cmd_vel', Twist, queue_size=1)
-
 
 # Create a Length by Width Matrix
 def make_Mat(x, y, value=None):
@@ -41,26 +38,13 @@ def make_Hmat(rot, trans):
 def extract_Mat(Hmat):
     x = Hmat[0, 3]
     y = Hmat[1, 3]
-    # # Check for gimbal lock
-    # sy = np.sqrt(Hmat[0, 0]**2 + Hmat[1, 0]**2)
-    # singular = sy < 1e-6
-    # if not singular:
-        # Rotation around z-axis (Yaw)
-        # theta = np.arctan2(Hmat[1, 0], Hmat[0, 0])
     theta = np.arctan2(y, x)
-    # else:
-    #     # Arbitrary value
-    #     theta = 0
-    # Return x, y, theta(degrees)
     return x, y, theta
     
 # Generate a Homogenious Matrix using x, y, z, theta(radians)
-def gen_Hmat(x, y, z, theta_d):
-	# Define rotation for 90 degrees about the z-axis
-	theta = theta_d # Convert 90 degrees to radians
+def gen_Hmat(x, y, z, theta):
 	cos_theta = np.cos(theta)
 	sin_theta = np.sin(theta)
-	
 	# Construct the homogeneous transformation matrix
 	T = np.array([
 	    [cos_theta, -sin_theta, 0, x],
@@ -68,7 +52,6 @@ def gen_Hmat(x, y, z, theta_d):
 	    [0,         0,          1, z],
 	    [0,         0,          0, 1]
 	])
-	
 	# Return Homogeneous Transformation Matrix
 	return T
 
@@ -83,7 +66,7 @@ def find_alpha(theta, dx, dy):
 # calculate the p using the change in delta x, delta y, theta   
 def find_beta(theta, alpha):
     return -(alpha + theta)
-    # Store Math Function: Pi / 2
+    # # Store Math Function: Pi / 2
     # pi_2 = math.pi / 2
     # if alpha > -pi_2 and alpha < pi_2:
     #     return -(alpha + theta)
@@ -105,14 +88,12 @@ def calc_v_w(Kp, Ka, Kb, dx, dy, theta):
     error_E = np.array([[p],[alpha],[beta]])
     # Perform the multiplication
     v, w = np.matmul(constraint_K, error_E)
-    # Convert angular Velocity to Radians
-    # w = w
     # returns linear & angular velocity
     return v, w
 		
 def check_odom(msg):
     # Setup Robot Counter, for checking iterations of Odometry Reading
-    global p, odom_counter, px, py, ptheta
+    global odom_counter, px, py, ptheta
     # Get x and y positions from the odometry message
     ox = msg.pose.pose.position.x
     oy = msg.pose.pose.position.y
@@ -120,17 +101,12 @@ def check_odom(msg):
 
     # Get orientation in quaternion form
     orientation_q = msg.pose.pose.orientation
-    qx = orientation_q.x
-    qy = orientation_q.y
-    qz = orientation_q.z
-    qw = orientation_q.w
 
     # Convert quaternion to euler angles (yaw represents theta) change to use tf
     (roll, pitch, otheta) = euler_from_quaternion([orientation_q.x, orientation_q.y, orientation_q.z, orientation_q.w])
     
 	# 1) Hard Coded - x, y, theta : (Destination Matrix) in reference to Source Matrix
-    # s_Hmat_d = gen_Hmat(0, 0, 0, np.radians(90))
-    s_Hmat_d = gen_Hmat(2, 2, 0, np.radians(-90))
+    s_Hmat_d = gen_Hmat(2, 1, 0, np.radians(90))
     # Extract x, y, theta from Destination
     ddx, ddy, ddtheta = extract_Mat(s_Hmat_d)
 	
@@ -145,12 +121,12 @@ def check_odom(msg):
         dx = ddx - ox
         dy = ddy - oy
         dtheta = otheta - ddtheta
-    else:
-        # Odometry Iteration > 0
-        # Calculate Difference/Distance from Last to Current Position
-        dx = ddx - ox - px
-        dy = ddy - oy - py
-        dtheta = otheta - ddtheta
+    # else:
+    #     # Odometry Iteration > 0
+    #     # Calculate Difference/Distance from Last to Current Position
+    #     dx = ddx - ox - px
+    #     dy = ddy - oy - py
+    #     dtheta = otheta - ddtheta
     # Calculate (Current Matrix) in reference to Source
     s_Hmat_c = gen_Hmat(dx, dy, 0, dtheta)
     
@@ -169,11 +145,8 @@ def check_odom(msg):
     # Find beta
     beta = find_beta(dtheta, alpha)
     # # Input K Constraints
-    # Kp = 0.16
-    # Ka = 0.1
-    # Kb = -0.01
-    Kp = 0.15
-    Ka = 0.1
+    Kp = 0.1
+    Ka = 0.15
     Kb = -0.01
     # Compute Linear & Angular Velocities
     v, w = calc_v_w(Kp, Ka, Kb, dx, dy, dtheta)
@@ -189,37 +162,36 @@ def check_odom(msg):
     odom_counter = odom_counter + 1
     
     # Loop till destination mets
-    # if prev_p > p:
     # Create a Twist message for linear and angular velocity
     velocity_cmd = Twist()
     # Move robot
     velocity_cmd.linear.x = v
     velocity_cmd.angular.z = w
     # Rotate robot
-    if v <= 0.03:
-        velocity_cmd.linear.x = 0
+    # if v <= 0.03:
+    #     velocity_cmd.linear.x = 0
     # Send Velocity Data to Robot
     motor_pub.publish(velocity_cmd)
     rospy.sleep(0.1)
 
     # Store Previous x, y, theta
-    px = dx
-    py = dy
-    ptheta = dtheta
+    # px = dx
+    # py = dy
+    # ptheta = dtheta
+    # Break out of Loop
+    if p <= 0.015:
+        # Stop Robot
+        velocity_cmd.linear.x = 0
+        velocity_cmd.angular.z = 0
+        motor_pub.publish(velocity_cmd)
+        rospy.sleep(0.1)
+        odom_sub.unregister()
 
 def start_odom_sub():
     # Sets Up Odometry Subscriber
     global odom_sub
     # Subscriber Starts Functionality
     odom_sub = rospy.Subscriber('/odom', Odometry, check_odom, queue_size=1)
-
-def stop_odom_sub():
-    # Sets Up Odometry Subscriber
-    global odom_sub
-    # Subscriber Ends Functionality
-    if odom_sub is not None:
-        odom_sub.unregister()
-        odom_sub = None
 
 def motor_controller():
     rospy.init_node('motor_controller', anonymous=True)
